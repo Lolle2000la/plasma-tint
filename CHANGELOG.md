@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-24
+
 ### Added
 
 - Release workflow that builds a self-contained x86_64 AppImage and attaches it
@@ -37,5 +39,6 @@ Initial release.
 - `Revert` to restore the default colour source; `Save profile as…` to export an
   `.icc`.
 
-[Unreleased]: https://github.com/Lolle2000la/plasma-tint/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Lolle2000la/plasma-tint/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/Lolle2000la/plasma-tint/releases/tag/v0.1.1
 [0.1.0]: https://github.com/Lolle2000la/plasma-tint/releases/tag/v0.1.0
