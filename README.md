@@ -58,6 +58,10 @@ The AppImage bundles Python and PySide6; it still needs KDE Plasma and
 for the AppImage runtime. Without FUSE, run it with
 `--appimage-extract-and-run`.
 
+AppImageUpdate metadata is embedded and every release ships a matching `.zsync`
+file, so **Gear Lever**, **Shelly** and `appimageupdatetool` can update the
+AppImage in place (delta updates, no full re-download).
+
 ### Python
 
 ```sh

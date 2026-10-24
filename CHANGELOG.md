@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-24
+
+### Added
+
+- AppImageUpdate metadata (`gh-releases-zsync`) and a matching `.zsync` delta
+  asset, so Gear Lever, Shelly and `appimageupdatetool` can update the AppImage
+  in place.
+
 ## [0.1.1] - 2026-10-24
 
 ### Added
@@ -39,6 +47,7 @@ Initial release.
 - `Revert` to restore the default colour source; `Save profile as…` to export an
   `.icc`.
 
-[Unreleased]: https://github.com/Lolle2000la/plasma-tint/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/Lolle2000la/plasma-tint/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/Lolle2000la/plasma-tint/releases/tag/v0.1.2
 [0.1.1]: https://github.com/Lolle2000la/plasma-tint/releases/tag/v0.1.1
 [0.1.0]: https://github.com/Lolle2000la/plasma-tint/releases/tag/v0.1.0

@@ -81,15 +81,61 @@ jobs:
       - name: Install build Python
         run: uv python install "$PYTHON_VERSION"
 
+      # zsyncmake lets appimagetool generate the .zsync delta-update file.
+      - name: Install zsync
+        run: sudo apt-get update && sudo apt-get install -y zsync binutils
+
       - name: Build AppImage
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: PYTHON="$(uv python find "$PYTHON_VERSION")" packaging/build-appimage.sh
 
+      - name: Verify update metadata
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -eu
+          owner="${GITHUB_REPOSITORY%%/*}"
+          repo="${GITHUB_REPOSITORY#*/}"
+          case "$VERSION" in
+            *-*) channel=latest-pre ;;
+            *) channel=latest ;;
+          esac
+          expected="gh-releases-zsync|$owner|$repo|$channel|plasma-tint-*-x86_64.AppImage.zsync"
+
+          appimage="dist/plasma-tint-$VERSION-x86_64.AppImage"
+          info=$(readelf --string-dump=.upd_info --wide "$appimage" \
+            | grep -o 'gh-releases-zsync|[^[:space:]]*' | head -n 1)
+          if [ "$info" != "$expected" ]; then
+            echo "::error::unexpected .upd_info: '$info' (expected '$expected')"
+            exit 1
+          fi
+          echo "Embedded update information: $info"
+
+          rm -rf squashfs-root
+          "$appimage" --appimage-extract > /dev/null
+          if ! grep -Fqx "X-AppImage-UpdateInformation=$info" squashfs-root/plasma-tint.desktop; then
+            echo "::error::desktop entry does not carry the update information"
+            exit 1
+          fi
+          rm -rf squashfs-root
+
+          zsync_file="$appimage.zsync"
+          if [ ! -s "$zsync_file" ]; then
+            echo "::error::$zsync_file is missing or empty"
+            exit 1
+          fi
+          if ! grep -Faq "releases/download/v$VERSION/plasma-tint-$VERSION-x86_64.AppImage" "$zsync_file"; then
+            echo "::error::$zsync_file does not reference the release asset"
+            exit 1
+          fi
+
       # A headless start-up check: the app has no CLI, so success means it is
       # still running when `timeout` kills it. The runner image is a bare
       # server, so install the GL libs a Plasma desktop would already have.
       - name: Smoke test the AppImage
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon0
@@ -106,7 +152,8 @@ jobs:
           PLASMA_TINT_ENV_OUT="$RUNNER_TEMP/child-env" \
             PATH="$RUNNER_TEMP/fakebin:$PATH" \
             QT_QPA_PLATFORM=offscreen \
-            timeout 15 dist/plasma-tint-*.AppImage --appimage-extract-and-run > smoke.log 2>&1
+            timeout 15 "dist/plasma-tint-$VERSION-x86_64.AppImage" \
+              --appimage-extract-and-run > smoke.log 2>&1
           status=$?
           cat smoke.log
           if [ "$status" -ne 124 ]; then
@@ -129,7 +176,7 @@ jobs:
 
       - name: Generate checksums
         working-directory: dist
-        run: sha256sum plasma-tint-*.AppImage > SHA256SUMS
+        run: sha256sum plasma-tint-*.AppImage plasma-tint-*.AppImage.zsync > SHA256SUMS
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -137,6 +184,7 @@ jobs:
           name: plasma-tint-${{ steps.version.outputs.version }}-x86_64
           path: |
             dist/plasma-tint-*.AppImage
+            dist/plasma-tint-*.AppImage.zsync
             dist/SHA256SUMS
 
       - name: Publish release
@@ -150,4 +198,5 @@ jobs:
           fail_on_unmatched_files: true
           files: |
             dist/plasma-tint-*.AppImage
+            dist/plasma-tint-*.AppImage.zsync
             dist/SHA256SUMS

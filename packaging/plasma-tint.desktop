@@ -10,3 +10,4 @@ Categories=Settings;Qt;
 Keywords=colour;color;gamma;icc;vcgt;hdr;display;calibration;nvidia;
 StartupNotify=true
 StartupWMClass=plasma-tint
+X-AppImage-UpdateInformation=

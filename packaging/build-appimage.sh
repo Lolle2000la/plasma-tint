@@ -6,14 +6,17 @@
 #   packaging/build-appimage.sh
 #
 # Environment:
-#   VERSION   Version embedded in the output filename (default: pyproject.toml)
-#   ARCH      AppImage architecture (default: uname -m)
-#   PYTHON    Interpreter used to create the build venv (default: python3)
-#   OUTDIR    Directory for the finished .AppImage (default: <repo>/dist)
+#   VERSION          Version embedded in the output filename (default: pyproject.toml)
+#   ARCH             AppImage architecture (default: uname -m)
+#   PYTHON           Interpreter used to create the build venv (default: python3)
+#   OUTDIR           Directory for the finished .AppImage (default: <repo>/dist)
+#   GITHUB_REPOSITORY  owner/repo used for the update URL (default: upstream)
 #
 # The bundle contains Python, PySide6/Qt and plasma-tint. It still uses the
 # system libraries a KDE Plasma desktop always has (glibc, libGL, fontconfig,
 # xcb/Wayland client libraries) plus the external `kscreen-doctor` tool.
+#
+# Building update metadata needs `zsyncmake` (package: zsync).
 
 set -euo pipefail
 
@@ -24,6 +27,10 @@ VERSION=${VERSION:-$(sed -n 's/^version = "\([^"]*\)"/\1/p' pyproject.toml | hea
 ARCH=${ARCH:-$(uname -m)}
 PYTHON=${PYTHON:-python3}
 OUTDIR=${OUTDIR:-$ROOT/dist}
+GITHUB_REPO=${GITHUB_REPOSITORY:-Lolle2000la/plasma-tint}
+
+install -d "$OUTDIR"
+OUTDIR=$(cd -- "$OUTDIR" && pwd)
 
 BUILD_DIR=$ROOT/build/appimage
 VENV=$BUILD_DIR/venv
@@ -45,6 +52,24 @@ if [ -z "$VERSION" ]; then
     echo "error: could not determine the version; set VERSION=..." >&2
     exit 1
 fi
+
+if ! command -v zsyncmake >/dev/null 2>&1; then
+    echo "error: zsyncmake not found; install zsync to generate update metadata" >&2
+    echo "       (Debian/Ubuntu: apt install zsync, Arch: pacman -S zsync)" >&2
+    exit 1
+fi
+
+# AppImageUpdate metadata. Stable builds follow the latest stable release;
+# prerelease versions ("0.2.0-rc1") follow the prerelease channel so they are
+# not offered a downgrade to the last stable build.
+OWNER=${GITHUB_REPO%%/*}
+REPO=${GITHUB_REPO#*/}
+case "$VERSION" in
+    *-*) UPDATE_CHANNEL=latest-pre ;;
+    *) UPDATE_CHANNEL=latest ;;
+esac
+UPDATE_INFO="gh-releases-zsync|$OWNER|$REPO|$UPDATE_CHANNEL|plasma-tint-*-$ARCH.AppImage.zsync"
+APPIMAGE_URL="https://github.com/$OWNER/$REPO/releases/download/v$VERSION/plasma-tint-$VERSION-$ARCH.AppImage"
 
 pip_install() {
     if command -v uv >/dev/null 2>&1; then
@@ -91,8 +116,12 @@ install -d \
     "$APPDIR/usr/share/icons/hicolor/scalable/apps"
 cp -a "$PYINSTALLER_DIST/plasma-tint/." "$APPDIR/usr/bin/"
 install -m 0755 "$ROOT/packaging/AppRun" "$APPDIR/AppRun"
-install -m 0644 "$ROOT/packaging/plasma-tint.desktop" "$APPDIR/plasma-tint.desktop"
-install -m 0644 "$ROOT/packaging/plasma-tint.desktop" \
+# Tools that read the desktop entry (Gear Lever, desktop integration) expect
+# the update information there as well; the authoritative copy is the ELF
+# .upd_info section that appimagetool embeds below.
+sed "s@^X-AppImage-UpdateInformation=.*@X-AppImage-UpdateInformation=$UPDATE_INFO@" \
+    "$ROOT/packaging/plasma-tint.desktop" > "$APPDIR/plasma-tint.desktop"
+install -m 0644 "$APPDIR/plasma-tint.desktop" \
     "$APPDIR/usr/share/applications/plasma-tint.desktop"
 install -m 0644 "$ROOT/packaging/plasma-tint.svg" "$APPDIR/plasma-tint.svg"
 install -m 0644 "$ROOT/packaging/plasma-tint.svg" \
@@ -109,11 +138,26 @@ if [ ! -x "$APPIMAGETOOL" ]; then
 fi
 
 echo "==> Packaging AppImage"
+echo "    update information: $UPDATE_INFO"
 # --appimage-extract-and-run avoids depending on FUSE being available
 # (containers and CI runners usually do not have it).
-ARCH="$ARCH" VERSION="$VERSION" "$APPIMAGETOOL" \
-    --appimage-extract-and-run \
-    --no-appstream \
-    "$APPDIR" "$OUTPUT"
+# -u embeds the update information in the ELF .upd_info section; if zsyncmake
+# is on PATH appimagetool also writes <output>.zsync. Run it from OUTDIR with a
+# relative output name so the .zsync lands next to the AppImage.
+(
+    cd "$OUTDIR"
+    ARCH="$ARCH" VERSION="$VERSION" "$APPIMAGETOOL" \
+        --appimage-extract-and-run \
+        --no-appstream \
+        --updateinformation "$UPDATE_INFO" \
+        --file-url "$APPIMAGE_URL" \
+        "$APPDIR" "$(basename "$OUTPUT")"
+)
+
+if [ ! -s "$OUTPUT.zsync" ]; then
+    echo "error: appimagetool did not create $OUTPUT.zsync" >&2
+    exit 1
+fi
 
 echo "==> Built $OUTPUT ($(du -h "$OUTPUT" | cut -f 1))"
+echo "==> Built $OUTPUT.zsync ($(du -h "$OUTPUT.zsync" | cut -f 1))"

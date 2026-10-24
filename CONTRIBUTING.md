@@ -40,9 +40,10 @@ packaging/build-appimage.sh
 ```
 
 It creates a throwaway venv under `build/appimage/`, runs PyInstaller, and
-writes `dist/plasma-tint-<version>-<arch>.AppImage`. `appimagetool` is
-downloaded on first use. Set `VERSION`, `ARCH`, `PYTHON` or `OUTDIR` to
-override the defaults. You need `python3`, `curl` and network access; `uv` is
+writes `dist/plasma-tint-<version>-<arch>.AppImage` plus the matching `.zsync`
+delta-update file. `appimagetool` is downloaded on first use. Set `VERSION`,
+`ARCH`, `PYTHON`, `OUTDIR` or `GITHUB_REPOSITORY` to override the defaults. You
+need `python3`, `curl`, `zsyncmake` (package `zsync`) and network access; `uv` is
 used for installs when available.
 
 The AppImage bundles Python, PySide6 and the application. System libraries that
