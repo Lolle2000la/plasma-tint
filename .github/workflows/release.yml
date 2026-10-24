@@ -93,13 +93,37 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon0
+
+          # Fake kscreen-doctor: record the environment the app hands to system
+          # binaries, then succeed without reporting any outputs.
+          mkdir -p "$RUNNER_TEMP/fakebin"
+          # shellcheck disable=SC2016 # expanded by the fake tool, not here
+          printf '#!/bin/sh\nenv > "${PLASMA_TINT_ENV_OUT:?}"\nexit 0\n' \
+            > "$RUNNER_TEMP/fakebin/kscreen-doctor"
+          chmod +x "$RUNNER_TEMP/fakebin/kscreen-doctor"
+
           set +e
-          QT_QPA_PLATFORM=offscreen timeout 15 dist/plasma-tint-*.AppImage \
-            --appimage-extract-and-run > smoke.log 2>&1
+          PLASMA_TINT_ENV_OUT="$RUNNER_TEMP/child-env" \
+            PATH="$RUNNER_TEMP/fakebin:$PATH" \
+            QT_QPA_PLATFORM=offscreen \
+            timeout 15 dist/plasma-tint-*.AppImage --appimage-extract-and-run > smoke.log 2>&1
           status=$?
           cat smoke.log
           if [ "$status" -ne 124 ]; then
             echo "::error::AppImage exited with status $status; expected it to keep running until the timeout"
+            exit 1
+          fi
+
+          # kscreen-doctor is a system Qt/KDE binary. It must not inherit the
+          # PyInstaller bundle directory on LD_LIBRARY_PATH, or it loads the
+          # bundled Qt and cannot talk to KWin (broken in v0.1.0).
+          if [ ! -s "$RUNNER_TEMP/child-env" ]; then
+            echo "::error::the AppImage never invoked kscreen-doctor"
+            exit 1
+          fi
+          if grep -q '_internal' "$RUNNER_TEMP/child-env"; then
+            echo "::error::PyInstaller library paths leaked into kscreen-doctor:"
+            grep '_internal' "$RUNNER_TEMP/child-env"
             exit 1
           fi
 

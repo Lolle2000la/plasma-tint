@@ -10,8 +10,10 @@ HDR is enabled (Plasma 6.7+).
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
+import sys
 from dataclasses import dataclass
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
@@ -38,10 +40,40 @@ class Output:
         return f"{self.name} ({self.hdr})"
 
 
+def _child_env() -> dict[str, str]:
+    """Environment for ``kscreen-doctor`` and other system binaries.
+
+    A frozen build (PyInstaller, used for the AppImage) puts its private Qt and
+    support libraries in ``_MEIPASS`` and prepends that directory to
+    ``LD_LIBRARY_PATH``. Child processes inherit it, so ``kscreen-doctor``
+    would load the bundled Qt instead of the system Qt and fail to initialise a
+    platform plugin. Unfrozen runs are left untouched.
+    """
+    env = os.environ.copy()
+    if not getattr(sys, "frozen", False):
+        return env
+
+    # PyInstaller saves the pre-bundle value here.
+    original = env.pop("LD_LIBRARY_PATH_ORIG", None)
+    if original:
+        env["LD_LIBRARY_PATH"] = original
+    else:
+        env.pop("LD_LIBRARY_PATH", None)
+
+    # Likewise, drop plugin paths that point into the bundle.
+    for name in ("QT_PLUGIN_PATH", "QT_QPA_PLATFORM_PLUGIN_PATH", "QML2_IMPORT_PATH"):
+        env.pop(name, None)
+    return env
+
+
 def _run(*args: str) -> str:
     try:
         result = subprocess.run(
-            ["kscreen-doctor", *args], capture_output=True, text=True, check=False
+            ["kscreen-doctor", *args],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_child_env(),
         )
     except FileNotFoundError as exc:
         raise KScreenError("kscreen-doctor was not found on PATH") from exc

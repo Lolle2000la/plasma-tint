@@ -11,6 +11,12 @@ All notable changes to this project are documented here. The format is based on
 - Release workflow that builds a self-contained x86_64 AppImage and attaches it
   (with SHA-256 checksums) to tagged GitHub releases.
 
+### Fixed
+
+- The AppImage no longer leaks PyInstaller's bundled library directory into
+  `kscreen-doctor` via `LD_LIBRARY_PATH`, which made it load the bundled Qt and
+  fail; displays and the active profile are detected again.
+
 ## [0.1.0]
 
 Initial release.
