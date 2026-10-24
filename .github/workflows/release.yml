@@ -87,9 +87,12 @@ jobs:
         run: PYTHON="$(uv python find "$PYTHON_VERSION")" packaging/build-appimage.sh
 
       # A headless start-up check: the app has no CLI, so success means it is
-      # still running when `timeout` kills it.
+      # still running when `timeout` kills it. The runner image is a bare
+      # server, so install the GL libs a Plasma desktop would already have.
       - name: Smoke test the AppImage
         run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon0
           set +e
           QT_QPA_PLATFORM=offscreen timeout 15 dist/plasma-tint-*.AppImage \
             --appimage-extract-and-run > smoke.log 2>&1
