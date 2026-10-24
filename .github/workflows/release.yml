@@ -1,0 +1,126 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (must match pyproject.toml), e.g. 0.2.0"
+        required: true
+        type: string
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # The ICC tests validate profiles through the system lcms2 (as KWin does).
+      - name: Install liblcms2
+        run: sudo apt-get update && sudo apt-get install -y liblcms2-2
+
+      - name: Install test dependencies
+        run: python -m pip install --upgrade pip pytest Pillow
+
+      - name: Run tests
+        run: PYTHONPATH=src pytest -q
+
+  appimage:
+    name: Build AppImage
+    needs: test
+    # Ubuntu 22.04 keeps the glibc requirement low without affecting the
+    # bundled Qt/Python versions.
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        env:
+          DISPATCH_VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          if [ -n "${DISPATCH_VERSION:-}" ]; then
+            version="$DISPATCH_VERSION"
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          case "$version" in
+            "" | *[!0-9A-Za-z.+-]*)
+              echo "::error::invalid version '$version'"
+              exit 1
+              ;;
+          esac
+          pyproject_version=$(sed -n 's/^version = "\([^"]*\)"/\1/p' pyproject.toml | head -n 1)
+          module_version=$(sed -n 's/^__version__ = "\([^"]*\)"/\1/p' src/plasma_tint/__init__.py | head -n 1)
+          if [ "$version" != "$pyproject_version" ] || [ "$version" != "$module_version" ]; then
+            echo "::error::version '$version' does not match pyproject.toml ($pyproject_version) and src/plasma_tint/__init__.py ($module_version)"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      # A standalone CPython from python-build-standalone is relocatable, which
+      # is what PyInstaller needs for the bundled interpreter.
+      - name: Install build Python
+        run: uv python install "$PYTHON_VERSION"
+
+      - name: Build AppImage
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: PYTHON="$(uv python find "$PYTHON_VERSION")" packaging/build-appimage.sh
+
+      # A headless start-up check: the app has no CLI, so success means it is
+      # still running when `timeout` kills it.
+      - name: Smoke test the AppImage
+        run: |
+          set +e
+          QT_QPA_PLATFORM=offscreen timeout 15 dist/plasma-tint-*.AppImage \
+            --appimage-extract-and-run > smoke.log 2>&1
+          status=$?
+          cat smoke.log
+          if [ "$status" -ne 124 ]; then
+            echo "::error::AppImage exited with status $status; expected it to keep running until the timeout"
+            exit 1
+          fi
+
+      - name: Generate checksums
+        working-directory: dist
+        run: sha256sum plasma-tint-*.AppImage > SHA256SUMS
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plasma-tint-${{ steps.version.outputs.version }}-x86_64
+          path: |
+            dist/plasma-tint-*.AppImage
+            dist/SHA256SUMS
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: plasma-tint ${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          fail_on_unmatched_files: true
+          files: |
+            dist/plasma-tint-*.AppImage
+            dist/SHA256SUMS

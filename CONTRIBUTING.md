@@ -31,6 +31,41 @@ The lcms2-based tests are skipped automatically if `liblcms2` isn't available
 PYTHONPATH=src python -m plasma_tint
 ```
 
+## Building an AppImage
+
+The release workflow and local builds share one implementation:
+
+```sh
+packaging/build-appimage.sh
+```
+
+It creates a throwaway venv under `build/appimage/`, runs PyInstaller, and
+writes `dist/plasma-tint-<version>-<arch>.AppImage`. `appimagetool` is
+downloaded on first use. Set `VERSION`, `ARCH`, `PYTHON` or `OUTDIR` to
+override the defaults. You need `python3`, `curl` and network access; `uv` is
+used for installs when available.
+
+The AppImage bundles Python, PySide6 and the application. System libraries that
+every Plasma desktop provides (glibc, libGL, fontconfig, Wayland/X11 client
+libraries) and `kscreen-doctor` are deliberately not bundled.
+
+## Releasing
+
+1. Bump the version in `pyproject.toml` and `src/plasma_tint/__init__.py`
+   (they must match) and move the changelog entries from `[Unreleased]` into a
+   new section.
+2. Commit, then tag and push:
+
+   ```sh
+   git tag v0.2.0
+   git push origin main --tags
+   ```
+
+The `Release` workflow runs the tests, checks that the tag matches the project
+version, builds the AppImage, and publishes it with a `SHA256SUMS` file.
+Re-running an existing release is possible via *Actions → Release →
+Run workflow* with the same version.
+
 ## Code layout
 
 See the table at the end of [docs/how-it-works.md](docs/how-it-works.md). In

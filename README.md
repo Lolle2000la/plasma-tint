@@ -43,6 +43,23 @@ appears (or can only be corrected) in HDR.
 
 ## Install
 
+### AppImage (no installation)
+
+Download `plasma-tint-<version>-x86_64.AppImage` from
+[Releases](https://github.com/Lolle2000la/plasma-tint/releases), then:
+
+```sh
+chmod +x plasma-tint-*-x86_64.AppImage
+./plasma-tint-*-x86_64.AppImage
+```
+
+The AppImage bundles Python and PySide6; it still needs KDE Plasma and
+`kscreen-doctor` on `PATH` (both are part of a Plasma installation), and FUSE 2
+for the AppImage runtime. Without FUSE, run it with
+`--appimage-extract-and-run`.
+
+### Python
+
 ```sh
 pipx install plasma-tint
 # or

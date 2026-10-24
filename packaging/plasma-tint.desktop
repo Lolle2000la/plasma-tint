@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=plasma-tint
+GenericName=Display Colour Adjustment
+Comment=Per-channel display colour adjustment for KDE Plasma, including HDR
+Exec=plasma-tint
+Icon=plasma-tint
+Terminal=false
+Categories=Settings;Qt;
+Keywords=colour;color;gamma;icc;vcgt;hdr;display;calibration;nvidia;
+StartupNotify=true
+StartupWMClass=plasma-tint
